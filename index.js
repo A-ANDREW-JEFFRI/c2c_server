@@ -1,20 +1,16 @@
-const { Sequelize, DataTypes } = require('sequelize');
-const { join } = require('path');
 const express = require('express');
 const dotenv = require('dotenv');
-const { readFileSync, unlink } = require('fs');
 const axios = require('axios');
 const multer = require('multer');
 const cors = require('cors');
 const os = require('os');
+const { readFileSync, unlink } = require('fs');
+const { join } = require('path');
 
-// Load environment variables
 dotenv.config();
 
-// Initialize Express
 const app = express();
 
-// CORS options
 const corsOptions = {
   origin: '*',
   methods: ['GET', 'POST'],
@@ -22,29 +18,18 @@ const corsOptions = {
 
 app.use(cors(corsOptions));
 
-// Configure multer to use the OS temporary directory
-const storage = multer.diskStorage({
-  destination: (req, file, cb) => {
-    cb(null, os.tmpdir());
-  },
-  filename: (req, file, cb) => {
-    cb(null, file.originalname);
-  }
-});
-
+const storage = multer.memoryStorage();
 const upload = multer({ storage });
 
 app.use(express.json());
 
-// Define the POST route
 app.post('/process-image', upload.single('image'), async (req, res) => {
   try {
     if (!req.file) {
       return res.status(400).send({ message: 'No file uploaded.' });
     }
 
-    const imagePath = join(os.tmpdir(), req.file.originalname);
-    const base64Image = readFileSync(imagePath).toString('base64');
+    const base64Image = req.file.buffer.toString('base64');
 
     const apiKey = process.env.OPENAI_API_KEY;
     const headers = {
@@ -88,11 +73,6 @@ app.post('/process-image', upload.single('image'), async (req, res) => {
       console.error('Error parsing JSON:', error.message);
       return res.status(400).json({ error: 'Failed to parse extracted data.' });
     }
-
-    // Clean up the uploaded file after processing
-    unlink(imagePath, (err) => {
-      if (err) console.error('Failed to delete the file:', err);
-    });
 
     res.json({ message: 'Data extracted and saved successfully', extractedData: parsedData });
 
