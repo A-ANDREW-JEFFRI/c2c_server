@@ -1,19 +1,16 @@
-const { join } = require('path');
-const express = require('express');
-const dotenv = require('dotenv');
-const { readFileSync, writeFileSync, unlinkSync } = require('fs');
+const { join } = require('path'); 
+const express = require('express'); 
+const dotenv = require('dotenv'); 
+const { readFileSync, unlinkSync } = require('fs'); 
 const axios = require('axios');
 const multer = require('multer');
-const cors = require('cors');
+const cors = require('cors'); 
 const os = require('os');
 
-// Load environment variables
 dotenv.config();
 
-// Initialize Express
 const app = express();
 
-// CORS options
 const corsOptions = {
   origin: '*',
   methods: ['GET', 'POST'],
@@ -21,17 +18,8 @@ const corsOptions = {
 
 app.use(cors(corsOptions));
 
-// Configure multer to use the OS temporary directory
-const storage = multer.diskStorage({
-  destination: (req, file, cb) => {
-    cb(null, '/tmp'); // Vercel's temporary storage directory
-  },
-  filename: (req, file, cb) => {
-    cb(null, file.originalname);
-  }
-});
-
-const upload = multer({ storage });
+// Configure multer to store files in the `/tmp` directory (for Vercel)
+const upload = multer({ dest: '/tmp' }); 
 
 app.use(express.json());
 
@@ -42,10 +30,13 @@ app.post('/process-image', upload.single('image'), async (req, res) => {
       return res.status(400).send({ message: 'No file uploaded.' });
     }
 
-    // Store the image temporarily in the `/tmp` directory
-    const imagePath = join('/tmp', req.file.originalname);
+    // Define the path to the image in the /tmp directory
+    const imagePath = join('/tmp', req.file.filename);
+
+    // Read image as base64
     const base64Image = readFileSync(imagePath).toString('base64');
 
+    // Set headers and payload for the OpenAI API request
     const apiKey = process.env.OPENAI_API_KEY;
     const headers = {
       'Content-Type': 'application/json',
@@ -76,11 +67,16 @@ app.post('/process-image', upload.single('image'), async (req, res) => {
       max_tokens: 300
     };
 
+    // Make the POST request to OpenAI API
     const response = await axios.post('https://api.openai.com/v1/chat/completions', payload, { headers });
 
+    // Log the API response
     console.log('OpenAI API Response:', response.data);
 
+    // Extract the content from the response
     const extractedText = response.data.choices[0].message.content;
+
+    // Parse the extracted JSON data if available
     let parsedData;
     try {
       parsedData = JSON.parse(extractedText);
@@ -89,12 +85,11 @@ app.post('/process-image', upload.single('image'), async (req, res) => {
       return res.status(400).json({ error: 'Failed to parse extracted data.' });
     }
 
-    // Serve the image temporarily via a base64 URL for display or immediate use
-    const imageUrl = `data:image/png;base64,${base64Image}`;
-
     // Clean up the uploaded file after processing
     unlinkSync(imagePath);
 
+    // Return the extracted data and base64 image URL to the client
+    const imageUrl = `data:image/png;base64,${base64Image}`;
     res.json({ message: 'Data extracted successfully', extractedData: parsedData, imageUrl });
 
   } catch (error) {
@@ -103,7 +98,7 @@ app.post('/process-image', upload.single('image'), async (req, res) => {
   }
 });
 
-// Export the API route
+// Export the API route (required for Vercel)
 module.exports = app;
 
 // Vercel requires a default export to run your API
